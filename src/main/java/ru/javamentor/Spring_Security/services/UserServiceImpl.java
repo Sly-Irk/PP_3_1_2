@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -141,10 +142,10 @@ public class UserServiceImpl implements UserService, UserDetailsService {
             Set<Role> managedRoles = new HashSet<>(roleRepository.findAllByIdIn(roleIds));
 
             if (managedRoles.size() != roleIds.size()) {
-                List<Long> foundIds = managedRoles.stream().map(Role::getId).toList();
+                // List<Long> foundIds = managedRoles.stream().map(Role::getId).toList();
+                List<Long> foundIds = managedRoles.stream().map(Role::getId).collect(Collectors.toList());
                 List<Long> missingIds = roleIds.stream()
-                        .filter(id -> !foundIds.contains(id))
-                        .toList();
+                        .filter(id -> !foundIds.contains(id)).collect(Collectors.toList());
 
                 throw new IllegalArgumentException(
                         String.format("Roles with ids %s not found", missingIds));
