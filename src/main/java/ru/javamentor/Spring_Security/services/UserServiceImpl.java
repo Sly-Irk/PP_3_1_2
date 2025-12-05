@@ -9,16 +9,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import ru.javamentor.Spring_Security.exceptions.PasswordException;
+import ru.javamentor.Spring_Security.exceptions.UserNameException;
+import ru.javamentor.Spring_Security.exceptions.UserRoleException;
 import ru.javamentor.Spring_Security.models.Role;
 import ru.javamentor.Spring_Security.models.User;
 import ru.javamentor.Spring_Security.repositories.RoleRepository;
 import ru.javamentor.Spring_Security.repositories.UserRepository;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.*;
 
 @Service
 @Transactional
@@ -29,8 +28,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     private final PasswordEncoder passwordEncoder;
 
     public UserServiceImpl(UserRepository userRepository,
-                           RoleRepository roleRepository,
-                           PasswordEncoder passwordEncoder) {
+                           RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
@@ -138,14 +136,14 @@ public class UserServiceImpl implements UserService, UserDetailsService {
             existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
         }
         // 6. Обновление ролей (если переданы)
-        if (roleIds != null && !roleIds.isEmpty()) {
+        /*if (roleIds != null && !roleIds.isEmpty()) {
             Set<Role> managedRoles = new HashSet<>(roleRepository.findAllByIdIn(roleIds));
 
             if (managedRoles.size() != roleIds.size()) {
-                // List<Long> foundIds = managedRoles.stream().map(Role::getId).toList();
-                List<Long> foundIds = managedRoles.stream().map(Role::getId).collect(Collectors.toList());
+                List<Long> foundIds = managedRoles.stream().map(Role::getId).toList();
                 List<Long> missingIds = roleIds.stream()
-                        .filter(id -> !foundIds.contains(id)).collect(Collectors.toList());
+                        .filter(id -> !foundIds.contains(id))
+                .toList();
 
                 throw new IllegalArgumentException(
                         String.format("Roles with ids %s not found", missingIds));
@@ -153,8 +151,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
             if (!existingUser.getRoles().equals(managedRoles)) {
                 existingUser.setRoles(managedRoles);
-            }
-        }
+            }*/
         // 7. Сохранение изменений (без аудита)
         userRepository.save(existingUser);
     }
@@ -227,5 +224,61 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                 user.getPassword(),
                 user.getAuthorities()
         );
+    }
+
+    @Override
+    public String authUser(Authentication authentication) {
+        if (authentication != null && authentication.isAuthenticated()) {
+            if (authentication.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+                return "redirect:/admin";
+            }
+            return "redirect:/user";
+        }
+        return "login";
+    }
+
+    @Override
+    public String regUser(User user) {
+        // Проверка пароля
+        if (user.getPassword() == null || user.getPassword().length() < 4) {
+            throw new PasswordException("Пароль должен содержать минимум 4 символа");
+        }
+
+        // Проверка существования пользователя
+        if (existsByUsername(user.getUsername())) {
+            throw new UserNameException("Этот логин уже занят");
+        }
+        Role userRole = roleRepository.findByName("ROLE_USER")
+                .orElseThrow(() -> new UserRoleException("Роль USER не найдена"));
+        user.setRoles(Collections.singleton(userRole));
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        saveUser(user);
+        return "redirect:/login?success";
+    }
+
+    @Override
+    public String createUser(User user, Set<Long> roleIds) {
+        if (existsByUsername(user.getUsername())) {
+            throw new UserNameException("Username already exists");
+        }
+        Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
+        user.setRoles(roles);
+        saveUser(user);
+        return "redirect:/admin";
+    }
+
+    public void contUpdateUser(Long id, String username, String password, List<Long> roleIds) {
+        User user = getUserById(id);
+        user.setUsername(username);
+
+        if (password != null && !password.isEmpty()) {
+            user.setPassword(password);
+        }
+
+        Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
+        user.setRoles(roles);
+
+        updateUser(user, roleIds);
     }
 }

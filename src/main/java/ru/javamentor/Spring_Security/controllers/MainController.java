@@ -8,12 +8,15 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
-import ru.javamentor.Spring_Security.models.Role;
+import ru.javamentor.Spring_Security.exceptions.PasswordException;
+import ru.javamentor.Spring_Security.exceptions.UserNameException;
+import ru.javamentor.Spring_Security.exceptions.UserRoleException;
 import ru.javamentor.Spring_Security.models.User;
 import ru.javamentor.Spring_Security.services.RoleService;
 import ru.javamentor.Spring_Security.services.UserService;
 
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Controller
 @RequestMapping
@@ -35,14 +38,7 @@ public class MainController {
     @GetMapping("/")
     public String showWelcomePage(Authentication authentication, Model model) {
         model.addAttribute("message", "Добро пожаловать!");
-        if (authentication != null && authentication.isAuthenticated()) {
-            if (authentication.getAuthorities().stream()
-                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
-                return "redirect:/admin";
-            }
-            return "redirect:/user";
-        }
-        return "login";
+        return userService.authUser(authentication);
     }
 
     @GetMapping("/register")
@@ -55,49 +51,35 @@ public class MainController {
     public String showLoginPage(@RequestParam(value = "error", required = false) Boolean error,
                                 @RequestParam(value = "logout", required = false) Boolean logout,
                                 Model model) {
-        if (Boolean.TRUE.equals(error)) {
-            model.addAttribute("error", "Неверный логин или пароль");
-        }
-        if (Boolean.TRUE.equals(logout)) {
-            model.addAttribute("message", "Вы успешно вышли из системы");
-        }
+        model.addAttribute(createLoginAtribyte(logout, error));
         return "login";
+
     }
 
-   /* @GetMapping("/access-denied")
-    public String showAccessDeniedPage() {
-        return "access-denied";
+    private Map<String, String> createLoginAtribyte(Boolean logout, Boolean error) {
+        Map<String, String> result = new HashMap<String, String>();
+
+        if (Boolean.TRUE.equals(error)) {
+            result.put("error", "Неверный логин или пароль");
+        }
+        if (Boolean.TRUE.equals(logout)) {
+            result.put("message", "Вы успешно вышли из системы");
+        }
+        return result;
     }
-*/
+
     @PostMapping("/register")
     public String registerUser(@ModelAttribute("user") @Valid User user,
                                BindingResult result) {
-        // Проверка пароля
-        if (user.getPassword() == null || user.getPassword().length() < 4) {
-            result.rejectValue("password", "error.password", "Пароль должен содержать минимум 4 символа");
-        }
-
-        // Проверка существования пользователя
-        if (userService.existsByUsername(user.getUsername())) {
-            result.rejectValue("username", "error.username", "Этот логин уже занят");
-        }
-
-        if (result.hasErrors()) {
-            return "register";
-        }
-
         try {
-            Role userRole = roleService.findByName("ROLE_USER")
-                    .orElseThrow(() -> new RuntimeException("Роль USER не найдена"));
-
-            user.setRoles(Collections.singleton(userRole));
-            user.setPassword(passwordEncoder.encode(user.getPassword()));
-            userService.saveUser(user);
-
-            return "redirect:/login?success";
-        } catch (Exception e) {
+            return userService.regUser(user);
+        } catch (UserRoleException e) {
             result.reject("error.registration", "Ошибка при регистрации: " + e.getMessage());
-            return "register";
+        } catch (PasswordException e) {
+            result.rejectValue("password", "error.password", e.getMessage());
+        } catch (UserNameException e) {
+            result.rejectValue("username", "error.username", e.getMessage());
         }
+        return "register";
     }
 }

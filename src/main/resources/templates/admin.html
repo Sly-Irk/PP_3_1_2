@@ -35,8 +35,8 @@
         </td>
         <td>
             <div>
-                <a th:href="@{'/user/' + ${user.id}}" style="text-decoration: none;">Upd</a>
-                <a th:href="@{/deleteUser(userId=${user.id})}" style="text-decoration: none;">Del</a>
+                <a th:href="@{'/admin/edit/' + ${user.id}}" style="text-decoration: none;">Upd</a>
+                <a th:href="@{'/admin/delete/' + ${user.id}}" style="text-decoration: none;">Del</a>
             </div>
         </td>
     </tr>

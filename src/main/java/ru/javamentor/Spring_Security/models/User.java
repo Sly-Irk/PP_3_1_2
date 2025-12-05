@@ -19,29 +19,26 @@ import java.util.stream.Collectors;
 public class User implements UserDetails {
 
     @Id
-    @Column(name = "id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // @Column(unique = true)
-    @NotBlank(message = "Имя не должно быть пустым")
-    @Size(min = 2, max = 50, message = "Имя не должен быть короче 2 и длинее 50 символов")
-    @Column(name = "username")
+    @Column(unique = true)
+    @NotBlank(message = "{user.username.notblank}")
+    @Size(min = 3, max = 50, message = "{user.username.size}")
     private String username;
 
-    @NotEmpty(message = "Пароль не должен быть пустым")
-    @Size(min = 2, max = 20, message = "Пароль не должен быть короче 2 и длинее 20 символов")
-    @Column(name = "password")
+    @Column
+    @NotBlank(message = "{user.password.notblank}")
+    @Size(min = 5, max = 50, message = "{user.password.size}")
     private String password;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @NotEmpty(message = "Роль не должна быть пустой")
+    @ManyToMany(fetch = FetchType.EAGER)
+    @NotEmpty(message = "{user.roles.notempty}")
     @JoinTable(name = "users_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
 
-    // Конструктор по умолчанию (нужен для Spring)
     public User() {
     }
 

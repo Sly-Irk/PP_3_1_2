@@ -9,12 +9,11 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
-import ru.javamentor.Spring_Security.models.Role;
+import ru.javamentor.Spring_Security.exceptions.UserNameExistException;
 import ru.javamentor.Spring_Security.models.User;
 import ru.javamentor.Spring_Security.repositories.RoleRepository;
 import ru.javamentor.Spring_Security.services.UserService;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -48,25 +47,18 @@ public class AdminController {
                              @RequestParam("roles") Set<Long> roleIds,
                              BindingResult bindingResult,
                              Model model) {
-
-        if (bindingResult.hasErrors()) {
-            return prepareModelAndView(model);
-        }
-
-        if (userService.existsByUsername(user.getUsername())) {
-            bindingResult.rejectValue("username", "error.username", "Username already exists");
-            return prepareModelAndView(model);
-        }
-
         try {
-            Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
-            user.setRoles(roles);
-            userService.saveUser(user);
-        } catch (Exception e) {
+            return userService.createUser(user, roleIds);
+        } catch (UserNameExistException e) {
             bindingResult.reject("error", "Error creating user: " + e.getMessage());
             return prepareModelAndView(model);
         }
-        return "redirect:/admin";
+    }
+
+    @GetMapping("/edit/{id}")
+    public String editUser(@PathVariable("id") Long id, Model model) {
+        model.addAttribute("user", userService.getUserById(id));
+        return "edit";
     }
 
     @PostMapping("/update")
@@ -74,22 +66,11 @@ public class AdminController {
                              @RequestParam("username") String username,
                              @RequestParam(value = "password", required = false) String password,
                              @RequestParam("roleIds") List<Long> roleIds) {
-
-        User user = userService.getUserById(id);
-        user.setUsername(username);
-
-        if (password != null && !password.isEmpty()) {
-            user.setPassword(password);
-        }
-
-        Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
-        user.setRoles(roles);
-
-        userService.updateUser(user, roleIds);
+        userService.contUpdateUser(id, username, password, roleIds);
         return "redirect:/admin";
     }
 
-    @PostMapping("/delete/{id}")
+    @GetMapping("/delete/{id}")
     public String deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return "redirect:/admin";

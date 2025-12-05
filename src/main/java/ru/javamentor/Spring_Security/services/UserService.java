@@ -1,5 +1,6 @@
 package ru.javamentor.Spring_Security.services;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import ru.javamentor.Spring_Security.models.Role;
 import ru.javamentor.Spring_Security.models.User;
@@ -32,4 +33,12 @@ public interface UserService {
     boolean userHasRole(Long userId, String roleName);
 
     void addRolesToUser(Long userId, Set<Role> roles);
+
+    String authUser(Authentication authentication);
+
+    String regUser(User user);
+
+    String createUser(User user, Set<Long> roleIds);
+
+    void contUpdateUser(Long id, String username, String password, List<Long> roleIds);
 }
