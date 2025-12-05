@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.w3.org/1999/xhtml">
+<head>
+    <title>User Panel</title>
+</head>
+<style>
+    table, th, td {
+        padding: 10px;
+        border: 1px solid;
+        border-collapse: collapse;
+    }
+</style>
+<body>
+<h1>Панель пользователя</h1>
+<div>
+    <table>
+        <tbody>
+        <thead>
+        <tr>
+            <th>ID пользователя</th>
+            <th>Имя пользователя</th>
+            <th>Роль</th>
+        </tr>
+        </thead>
+        <tbody>
+        <td th:text="${user.id}"></td>
+        <td th:text="${user.username}"></td>
+        <th:text
+        ="${role.name.replace('ROLE_', ' ')}">
+        <td>
+            <span th:each="role : ${user.roles}"
+                  th:class="${role.name == 'ROLE_ADMIN'}"
+                  th:text="${role.name.replace('ROLE_', ' ')}">
+            </span>
+        </td>
+        </tbody>
+    </table>
+</div>
+<br>
+<div sec:authorize="hasRole('ADMIN')">
+    <form th:action="@{/admin}">
+        <button type="submit">Админка</button>
+    </form>
+    <br>
+</div>
+<div th:insert="~{fragments/logout-section :: logout}"></div>
+</body>
+</html>
