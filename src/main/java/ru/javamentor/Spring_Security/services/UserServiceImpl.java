@@ -8,16 +8,16 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 import ru.javamentor.Spring_Security.exceptions.PasswordException;
 import ru.javamentor.Spring_Security.exceptions.UserNameException;
-import ru.javamentor.Spring_Security.exceptions.UserRoleException;
+import ru.javamentor.Spring_Security.exceptions.UserNameExistException;
 import ru.javamentor.Spring_Security.models.Role;
 import ru.javamentor.Spring_Security.models.User;
 import ru.javamentor.Spring_Security.repositories.RoleRepository;
 import ru.javamentor.Spring_Security.repositories.UserRepository;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -28,50 +28,11 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     private final PasswordEncoder passwordEncoder;
 
     public UserServiceImpl(UserRepository userRepository,
-                           RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+                           RoleRepository roleRepository,
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
-    }
-
-    @Override
-    public void grantUserRole(Long userId, Role role) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
-
-        if (role == null) {
-            throw new IllegalArgumentException("Role cannot be null");
-        }
-
-        Role managedRole = roleRepository.findById(role.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Role not found"));
-
-        if (user.addRole(managedRole)) {
-            userRepository.save(user);
-        }
-    }
-
-    @Override
-    public void registerNewUser(User user) {
-        if (userRepository.findByUsername(user.getUsername()).isPresent()) {
-            throw new IllegalArgumentException("Username already exists");
-        }
-
-        Role userRole = roleRepository.findByName("ROLE_USER")
-                .orElseThrow(() -> new IllegalStateException("Default role ROLE_USER not found"));
-
-        user.addRole(userRole);
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        userRepository.save(user);
-    }
-
-    @Override
-    public boolean userHasRole(Long userId, String roleName) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
-        return user.getRoles().stream()
-                .anyMatch(role -> role.getName().equals(roleName));
     }
 
     @Override
@@ -95,25 +56,35 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
     @Override
     public void saveUser(User user) {
-        if (userRepository.findByUsername(user.getUsername()).isPresent()) {
-            throw new IllegalArgumentException("Username already exists");
+        if (user.getId() == null) {
+            if (userRepository.findByUsername(user.getUsername()).isPresent()) {
+                throw new IllegalArgumentException("Username already exists");
+            }
+        } else {
+            User existingUser = userRepository.findById(user.getId())
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+            if (!existingUser.getUsername().equals(user.getUsername()) &&
+                    userRepository.findByUsername(user.getUsername()).isPresent()) {
+                throw new IllegalArgumentException("Username already exists");
+            }
         }
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
         userRepository.save(user);
     }
 
     @Override
     @Transactional
     public void updateUser(User user, List<Long> roleIds) {
-        // 1. Проверка входных параметров
         if (user == null || user.getId() == null) {
             throw new IllegalArgumentException("User and user ID cannot be null");
         }
-        // 2. Получение существующего пользователя
         User existingUser = userRepository.findById(user.getId())
                 .orElseThrow(() -> new UsernameNotFoundException(
                         String.format("User not found with id: %d", user.getId())));
-        // 3. Проверка прав доступа
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         User currentUser = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new UsernameNotFoundException("Current user not found"));
@@ -123,7 +94,6 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                 throw new SecurityException("You can only edit your own profile");
             }
         }
-        // 4. Проверка и обновление username
         if (!existingUser.getUsername().equals(user.getUsername())) {
             if (existsByUsername(user.getUsername())) {
                 throw new IllegalArgumentException(
@@ -131,28 +101,24 @@ public class UserServiceImpl implements UserService, UserDetailsService {
             }
             existingUser.setUsername(user.getUsername());
         }
-        // 5. Обновление пароля
-        if (StringUtils.hasText(user.getPassword())) {
+        if (user.getPassword() != null && !user.getPassword().trim().isEmpty()) {
             existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
         }
-        // 6. Обновление ролей (если переданы)
-        /*if (roleIds != null && !roleIds.isEmpty()) {
+        if (roleIds != null && !roleIds.isEmpty()) {
             Set<Role> managedRoles = new HashSet<>(roleRepository.findAllByIdIn(roleIds));
 
             if (managedRoles.size() != roleIds.size()) {
                 List<Long> foundIds = managedRoles.stream().map(Role::getId).toList();
                 List<Long> missingIds = roleIds.stream()
                         .filter(id -> !foundIds.contains(id))
-                .toList();
-
+                        .toList();
                 throw new IllegalArgumentException(
-                        String.format("Roles with ids %s not found", missingIds));
+                        String.format("Roles with IDs %s not found", missingIds));
             }
-
             if (!existingUser.getRoles().equals(managedRoles)) {
                 existingUser.setRoles(managedRoles);
-            }*/
-        // 7. Сохранение изменений (без аудита)
+            }
+        }
         userRepository.save(existingUser);
     }
 
@@ -171,7 +137,6 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         if (role == null || role.getId() == null) {
             throw new IllegalArgumentException("Role cannot be null and must have ID");
         }
-
         Role managedRole = roleRepository.findById(role.getId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         String.format("Role with id %d not found", role.getId())));
@@ -185,25 +150,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                     String.format("User %s already has role %s",
                             user.getUsername(), managedRole.getName()));
         }
-
         user.addRole(managedRole);
-        userRepository.save(user);
-    }
-
-    @Override
-    public void addRolesToUser(Long userId, Set<Role> roles) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
-        Set<Role> managedRoles = new HashSet<>();
-        for (Role role : roles) {
-            Role managedRole = roleRepository.findById(role.getId())
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Role not found with id: " + role.getId()));
-            managedRoles.add(managedRole);
-        }
-
-        user.addRoles(managedRoles);
         userRepository.save(user);
     }
 
@@ -218,7 +165,6 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     public UserDetails loadUserByUsername(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
@@ -239,46 +185,82 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     @Override
-    public String regUser(User user) {
-        // Проверка пароля
+    public String createUser(User user, Set<Long> roleIds) {
         if (user.getPassword() == null || user.getPassword().length() < 4) {
             throw new PasswordException("Пароль должен содержать минимум 4 символа");
         }
+        if (existsByUsername(user.getUsername())) {
+            throw new UserNameExistException("Этот логин уже занят");
+        }
+        Set<Role> roles = new HashSet<>();
+        if (roleIds != null && !roleIds.isEmpty()) {
+            List<Role> foundRoles = roleRepository.findAllByIdIn(new ArrayList<>(roleIds));
 
-        // Проверка существования пользователя
+            if (foundRoles.size() != roleIds.size()) {
+                Set<Long> foundIds = foundRoles.stream()
+                        .map(Role::getId)
+                        .collect(Collectors.toSet());
+
+                List<Long> missingIds = roleIds.stream()
+                        .filter(id -> !foundIds.contains(id))
+                        .collect(Collectors.toList());
+                throw new IllegalArgumentException("Роли с ID " + missingIds + " не найдены");
+            }
+            roles.addAll(foundRoles);
+        } else {
+            Role defaultRole = roleRepository.findByName("ROLE_USER")
+                    .orElseGet(() -> {
+                        Role role = new Role();
+                        role.setName("ROLE_USER");
+                        return roleRepository.save(role);
+                    });
+            roles.add(defaultRole);
+        }
+        user.setRoles(roles);
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        userRepository.save(user);
+        return "redirect:/admin";
+    }
+
+    @Override
+    public String regUser(User user) {
+        if (user.getPassword() == null || user.getPassword().length() < 4) {
+            throw new PasswordException("Пароль должен содержать минимум 4 символа");
+        }
         if (existsByUsername(user.getUsername())) {
             throw new UserNameException("Этот логин уже занят");
         }
-        Role userRole = roleRepository.findByName("ROLE_USER")
-                .orElseThrow(() -> new UserRoleException("Роль USER не найдена"));
-        user.setRoles(Collections.singleton(userRole));
+
+        String selectedRole = user.getSelectedRole();
+        if (selectedRole == null || (!selectedRole.equals("ADMIN") && !selectedRole.equals("USER"))) {
+            selectedRole = "USER";
+        }
+        String roleName = "ROLE_" + selectedRole;
+        Role role = roleRepository.findByName(roleName)
+                .orElseGet(() -> {
+                    Role newRole = new Role();
+                    newRole.setName(roleName);
+                    return roleRepository.save(newRole);
+                });
+        user.setRoles(Collections.singleton(role));
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        saveUser(user);
+        userRepository.save(user);
         return "redirect:/login?success";
     }
 
     @Override
-    public String createUser(User user, Set<Long> roleIds) {
-        if (existsByUsername(user.getUsername())) {
-            throw new UserNameException("Username already exists");
-        }
-        Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
-        user.setRoles(roles);
-        saveUser(user);
-        return "redirect:/admin";
-    }
-
     public void contUpdateUser(Long id, String username, String password, List<Long> roleIds) {
         User user = getUserById(id);
         user.setUsername(username);
 
         if (password != null && !password.isEmpty()) {
-            user.setPassword(password);
+            user.setPassword(passwordEncoder.encode(password));
         }
 
-        Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
-        user.setRoles(roles);
-
+        if (roleIds != null && !roleIds.isEmpty()) {
+            Set<Role> roles = new HashSet<>(roleRepository.findAllByIdIn(roleIds));
+            user.setRoles(roles);
+        }
         updateUser(user, roleIds);
     }
 }

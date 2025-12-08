@@ -2,26 +2,44 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.w3.org/1999/xhtml">
 <head>
     <meta charset="UTF-8">
-    <title>Registration page</title>
+    <title>Регистрация нового пользователя</title>
 </head>
-<h1>Страница регистрации</h1>
 <body>
+<h1>Страница регистрации</h1>
 <form th:action="@{/register}" method="post" th:object="${user}">
-    <label for="username">Логин: </label>
-    <input type="text" name="username" id="username"
+    <div>
+        <label for="username">Логин: </label>
+        <input type="text" th:field="*{username}" id="username" placeholder="Ваш логин" required/>
+        <div th:if="${#fields.hasErrors('username')}" th:errors="*{username}" style="color: red"></div>
     </div>
     <div>
         <label for="password">Пароль: </label>
-        <input type="password" name="password" id="password"
+        <input type="password" th:field="*{password}" id="password" placeholder="Ваш пароль" required
+               autocomplete="off"/>
+        <div th:if="${#fields.hasErrors('password')}" th:errors="*{password}" style="color: red"></div>
     </div>
+    <div sec:authorize="hasAuthority('ROLE_ADMIN')">
+        <br>
+        <div>
+            <label>Выберите роль:</label>
+            <div>
+                <input type="radio" th:field="*{selectedRole}" id="roleUser" value="USER" checked required>
+                <label for="roleUser">USER</label>
+            </div>
+            <div>
+                <input type="radio" th:field="*{selectedRole}" id="roleAdmin" value="ADMIN">
+                <label for="roleAdmin">ADMIN</label>
+            </div>
+            <div th:if="${#fields.hasErrors('selectedRole')}" th:errors="*{selectedRole}" style="color: red"></div>
+        </div>
+        <br>
+        <div>
+            <a th:href="@{/admin}">Отменить</a>
+        </div>
     </div>
     <br>
-    <a th:href="@{/login}">Уже есть учётная запись? Войди.</a>
+    <a th:href="@{/login}">Уже есть учётная запись? Войдите.</a>
     <br><br>
-    <div sec:authorize="hasRole('ADMIN')">
-        <a th:href="@{/admin}">Отмена</a>
-        <br><br>
-    </div>
     <div>
         <button type="submit">Зарегистрироваться</button>
     </div>

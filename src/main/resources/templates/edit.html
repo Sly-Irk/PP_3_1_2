@@ -2,31 +2,34 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Editing User</title>
+    <title>Редактирование пользователя</title>
 </head>
 <body>
 <h1>Редактирование пользователя</h1>
 
-<form th:action="@{/admin/update}" th:object="${user}" method="post" onsubmit="return validateForm()">
-    <input type="hidden" th:field="*{id}">
+<form th:action="@{/admin/update}" method="post" autocomplete="off">
+    <input type="hidden" name="id" th:value="${user.id}">
 
     <div>
         <label for="username">Имя пользователя:</label>
-        <input type="text" id="username" th:field="*{username}" required>
+        <input type="text" id="username" name="username" th:value="${user.username}" required>
     </div>
 
     <div>
         <label for="password">Пароль:</label>
-        <input type="password" id="password" th:field="*{password}" required>
+        <input type="password" name="password" id="password" placeholder="Можно оставить пустым">
     </div>
+
     <div>
-        <label for="roles">Роли:</label>
-        <div th:each="role : ${user.roles}">
-            <input type="checkbox" name="roles" th:value="${role.name}"
-                   th:checked="${user.roles != null && user.roles.contains(role)}"
-                   th:text="${role.name.replace('ROLE_', ' ')}">
+        <label>Роли:</label>
+        <div th:each="role : ${allRoles}">
+            <input type="checkbox" name="roleIds" th:value="${role.id}"
+                   th:checked="${#lists.contains(user.roles, role)}"
+                   th:id="'role-' + ${role.id}">
+            <label th:for="'role-' + ${role.id}" th:text="${role.name.replace('ROLE_', '')}"></label>
         </div>
     </div>
+
     <br><br>
     <a th:href="@{/admin}">К списку пользователей</a>
     <br><br>

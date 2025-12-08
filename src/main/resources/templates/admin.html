@@ -2,12 +2,12 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Admin page</title>
+    <title>Admin panel</title>
 </head>
 <style>
     table, th, td {
         padding: 10px;
-        border: 1px solid;
+        border: 1px solid black;
         border-collapse: collapse;
     }
 </style>
@@ -26,26 +26,28 @@
     <tbody>
     <tr th:each="user : ${users}">
         <td th:text="${user.id}">ID</td>
-        <td th:text="${user.username}">USERNAME</td>
+        <td th:text="${user.username}">Username</td>
         <td>
             <span th:each="role : ${user.roles}"
-                  th:class="${role.name == 'ROLE_ADMIN'}"
+                  th:class="${role.name == 'ROLE_ADMIN'} ? 'admin-role'"
                   th:text="${role.name.replace('ROLE_', ' ')}">
             </span>
         </td>
         <td>
             <div>
-                <a th:href="@{'/admin/edit/' + ${user.id}}" style="text-decoration: none;">Upd</a>
-                <a th:href="@{'/admin/delete/' + ${user.id}}" style="text-decoration: none;">Del</a>
+                <a th:href="@{'/admin/edit/' + ${user.id}}"
+                   style="text-decoration: none;">Редактировать</a>
+                <a th:href="@{'/admin/delete/' + ${user.id}}"
+                   onclick="return confirm('Вы уверены, что хотите удалить пользователя?')"
+                   style="text-decoration: none;">Удалить</a>
             </div>
         </td>
     </tr>
     </tbody>
 </table>
-</div>
 <br>
 <a th:href="@{/register}" style="text-decoration: none;">Регистрация нового пользователя</a>
 <br><br>
-<div th:insert="~{fragments/logout-section :: logout}"></div>
+<div th:replace="~{fragments/logout-section :: logout}"></div>
 </body>
 </html>

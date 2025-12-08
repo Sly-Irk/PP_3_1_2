@@ -26,14 +26,6 @@ public interface UserService {
 
     boolean existsByUsername(String username);
 
-    void grantUserRole(Long userId, Role role);
-
-    void registerNewUser(User user);
-
-    boolean userHasRole(Long userId, String roleName);
-
-    void addRolesToUser(Long userId, Set<Role> roles);
-
     String authUser(Authentication authentication);
 
     String regUser(User user);

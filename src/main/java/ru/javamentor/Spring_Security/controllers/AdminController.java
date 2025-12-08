@@ -9,7 +9,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
-import ru.javamentor.Spring_Security.exceptions.UserNameExistException;
 import ru.javamentor.Spring_Security.models.User;
 import ru.javamentor.Spring_Security.repositories.RoleRepository;
 import ru.javamentor.Spring_Security.services.UserService;
@@ -49,8 +48,8 @@ public class AdminController {
                              Model model) {
         try {
             return userService.createUser(user, roleIds);
-        } catch (UserNameExistException e) {
-            bindingResult.reject("error", "Error creating user: " + e.getMessage());
+        } catch (Exception e) { // Ловим все исключения
+            bindingResult.reject("error", "Ошибка создания пользователя: " + e.getMessage());
             return prepareModelAndView(model);
         }
     }
@@ -58,6 +57,7 @@ public class AdminController {
     @GetMapping("/edit/{id}")
     public String editUser(@PathVariable("id") Long id, Model model) {
         model.addAttribute("user", userService.getUserById(id));
+        model.addAttribute("allRoles", roleRepository.findAll());
         return "edit";
     }
 

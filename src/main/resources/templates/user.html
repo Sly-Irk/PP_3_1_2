@@ -1,48 +1,48 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.w3.org/1999/xhtml">
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity6">
 <head>
-    <title>User Panel</title>
+    <meta charset="UTF-8"/>
+    <title>Пользовательская панель</title>
+    <style>
+        table, th, td {
+            padding: 10px;
+            border: 1px solid;
+            border-collapse: collapse;
+        }
+    </style>
 </head>
-<style>
-    table, th, td {
-        padding: 10px;
-        border: 1px solid;
-        border-collapse: collapse;
-    }
-</style>
 <body>
 <h1>Панель пользователя</h1>
 <div>
     <table>
-        <tbody>
         <thead>
         <tr>
             <th>ID пользователя</th>
             <th>Имя пользователя</th>
-            <th>Роль</th>
+            <th>Роли</th>
         </tr>
         </thead>
         <tbody>
-        <td th:text="${user.id}"></td>
-        <td th:text="${user.username}"></td>
-        <th:text
-        ="${role.name.replace('ROLE_', ' ')}">
-        <td>
-            <span th:each="role : ${user.roles}"
-                  th:class="${role.name == 'ROLE_ADMIN'}"
-                  th:text="${role.name.replace('ROLE_', ' ')}">
-            </span>
-        </td>
+        <tr>
+            <td th:text="${user.id}">ID</td>
+            <td th:text="${user.username}">Имя пользователя</td>
+            <td>
+                <span th:each="role : ${user.roles}"
+                      th:text="${role.name.replace('ROLE_', ' ')} + ' '">
+                </span>
+            </td>
+        </tr>
         </tbody>
     </table>
 </div>
 <br>
-<div sec:authorize="hasRole('ADMIN')">
-    <form th:action="@{/admin}">
-        <button type="submit">Админка</button>
+<div sec:authorize="hasAuthority('ROLE_ADMIN')">
+    <form th:action="@{/admin}" method="get">
+        <button type="submit">Переход в админ-панель</button>
     </form>
     <br>
 </div>
-<div th:insert="~{fragments/logout-section :: logout}"></div>
+<div th:replace="fragments/logout-section :: logout"></div>
 </body>
 </html>

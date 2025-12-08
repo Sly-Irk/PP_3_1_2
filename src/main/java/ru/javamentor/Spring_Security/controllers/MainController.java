@@ -3,7 +3,6 @@ package ru.javamentor.Spring_Security.controllers;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -12,7 +11,7 @@ import ru.javamentor.Spring_Security.exceptions.PasswordException;
 import ru.javamentor.Spring_Security.exceptions.UserNameException;
 import ru.javamentor.Spring_Security.exceptions.UserRoleException;
 import ru.javamentor.Spring_Security.models.User;
-import ru.javamentor.Spring_Security.services.RoleService;
+import ru.javamentor.Spring_Security.repositories.RoleRepository;
 import ru.javamentor.Spring_Security.services.UserService;
 
 import java.util.HashMap;
@@ -23,16 +22,12 @@ import java.util.Map;
 public class MainController {
 
     private final UserService userService;
-    private final RoleService roleService;
-    private final PasswordEncoder passwordEncoder;
+    private final RoleRepository roleRepository;
 
     @Autowired
-    public MainController(UserService userService,
-                          RoleService roleService,
-                          PasswordEncoder passwordEncoder) {
+    public MainController(UserService userService, RoleRepository roleRepository) {
         this.userService = userService;
-        this.roleService = roleService;
-        this.passwordEncoder = passwordEncoder;
+        this.roleRepository = roleRepository;
     }
 
     @GetMapping("/")
@@ -53,12 +48,10 @@ public class MainController {
                                 Model model) {
         model.addAttribute(createLoginAtribyte(logout, error));
         return "login";
-
     }
 
     private Map<String, String> createLoginAtribyte(Boolean logout, Boolean error) {
-        Map<String, String> result = new HashMap<String, String>();
-
+        Map<String, String> result = new HashMap<>();
         if (Boolean.TRUE.equals(error)) {
             result.put("error", "Неверный логин или пароль");
         }

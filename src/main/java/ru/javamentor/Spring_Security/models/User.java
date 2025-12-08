@@ -29,10 +29,13 @@ public class User implements UserDetails {
 
     @Column
     @NotBlank(message = "{user.password.notblank}")
-    @Size(min = 5, max = 50, message = "{user.password.size}")
+    // @Size(min = 5, max = 50, message = "{user.password.size}")
     private String password;
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @Transient
+    private String selectedRole = "USER";
+
+    @ManyToMany(fetch = FetchType.LAZY)
     @NotEmpty(message = "{user.roles.notempty}")
     @JoinTable(name = "users_roles",
             joinColumns = @JoinColumn(name = "user_id"),
@@ -97,6 +100,7 @@ public class User implements UserDetails {
         return this.roles.addAll(roles);
     }
 
+
     public Long getId() {
         return id;
     }
@@ -123,6 +127,13 @@ public class User implements UserDetails {
         this.password = password;
     }
 
+    public String getSelectedRole() {
+        return selectedRole;
+    }
+
+    public void setSelectedRole(String selectedRole) {
+        this.selectedRole = selectedRole;
+    }
 
     @Override
     public boolean equals(Object o) {
