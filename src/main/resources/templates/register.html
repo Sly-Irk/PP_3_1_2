@@ -23,14 +23,14 @@
         <div>
             <label>Выберите роль:</label>
             <div>
-                <input type="radio" th:field="*{selectedRole}" id="roleUser" value="USER" checked required>
-                <label for="roleUser">USER</label>
-            </div>
-            <div>
                 <input type="radio" th:field="*{selectedRole}" id="roleAdmin" value="ADMIN">
                 <label for="roleAdmin">ADMIN</label>
             </div>
             <div th:if="${#fields.hasErrors('selectedRole')}" th:errors="*{selectedRole}" style="color: red"></div>
+        </div>
+        <div>
+            <input type="radio" th:field="*{selectedRole}" id="roleUser" value="USER" checked required>
+            <label for="roleUser">USER</label>
         </div>
         <br>
         <div>

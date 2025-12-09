@@ -1,5 +1,6 @@
 package ru.javamentor.Spring_Security.services;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -27,12 +28,39 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
+    @Autowired
     public UserServiceImpl(UserRepository userRepository,
                            RoleRepository roleRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    private Role getOrCreateRole(String name) {
+        return roleRepository.findByName(name)
+                .orElseGet(() -> {
+                    Role role = new Role();
+                    role.setName(name);
+                    return roleRepository.save(role);
+                });
+    }
+
+    private Set<Role> resolveRoles(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptySet();
+        }
+        List<Role> found = roleRepository.findAllByIdIn(ids);
+        if (found.size() != ids.size()) {
+            Set<Long> foundIds = found.stream().map(Role::getId).collect(Collectors.toSet());
+            List<Long> missing = ids.stream().filter(id -> !foundIds.contains(id)).toList();
+            throw new IllegalArgumentException("Роли с ID " + missing + " не найдены");
+        }
+        return new HashSet<>(found);
+    }
+
+    private boolean isPasswordEncoded(String password) {
+        return password != null && password.startsWith("$2a$");
     }
 
     @Override
@@ -45,7 +73,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     @Transactional(readOnly = true)
     public User getUserById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + id));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + id));
     }
 
     @Override
@@ -55,109 +83,87 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public boolean existsByUsername(String username) {
+        return userRepository.findByUsername(username).isPresent();
+    }
+
+    @Override
     public void saveUser(User user) {
+
         if (user.getId() == null) {
-            if (userRepository.findByUsername(user.getUsername()).isPresent()) {
+            if (existsByUsername(user.getUsername())) {
                 throw new IllegalArgumentException("Username already exists");
             }
         } else {
-            User existingUser = userRepository.findById(user.getId())
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
-            if (!existingUser.getUsername().equals(user.getUsername()) &&
-                    userRepository.findByUsername(user.getUsername()).isPresent()) {
+            User existing = getUserById(user.getId());
+            if (!existing.getUsername().equals(user.getUsername()) &&
+                    existsByUsername(user.getUsername())) {
                 throw new IllegalArgumentException("Username already exists");
             }
         }
-        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+
+        if (!isPasswordEncoded(user.getPassword())) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));
         }
+
         userRepository.save(user);
     }
 
     @Override
-    @Transactional
     public void updateUser(User user, List<Long> roleIds) {
-        if (user == null || user.getId() == null) {
-            throw new IllegalArgumentException("User and user ID cannot be null");
-        }
-        User existingUser = userRepository.findById(user.getId())
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        String.format("User not found with id: %d", user.getId())));
 
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User currentUser = userRepository.findByUsername(authentication.getName())
+        User existing = getUserById(user.getId());
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User current = userRepository.findByUsername(auth.getName())
                 .orElseThrow(() -> new UsernameNotFoundException("Current user not found"));
 
-        if (currentUser.getRoles().stream().noneMatch(r -> "ROLE_ADMIN".equals(r.getName()))) {
-            if (!currentUser.getId().equals(user.getId())) {
-                throw new SecurityException("You can only edit your own profile");
-            }
+        boolean isAdmin = current.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()));
+
+        if (!isAdmin && !current.getId().equals(user.getId())) {
+            throw new SecurityException("You can only edit your own profile");
         }
-        if (!existingUser.getUsername().equals(user.getUsername())) {
+
+        if (!existing.getUsername().equals(user.getUsername())) {
             if (existsByUsername(user.getUsername())) {
-                throw new IllegalArgumentException(
-                        String.format("Username '%s' already exists", user.getUsername()));
+                throw new IllegalArgumentException("Username already exists");
             }
-            existingUser.setUsername(user.getUsername());
+            existing.setUsername(user.getUsername());
         }
-        if (user.getPassword() != null && !user.getPassword().trim().isEmpty()) {
-            existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
+        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+            if (!isPasswordEncoded(user.getPassword())) {
+                existing.setPassword(passwordEncoder.encode(user.getPassword()));
+            } else {
+                existing.setPassword(user.getPassword());
+            }
         }
         if (roleIds != null && !roleIds.isEmpty()) {
-            Set<Role> managedRoles = new HashSet<>(roleRepository.findAllByIdIn(roleIds));
-
-            if (managedRoles.size() != roleIds.size()) {
-                List<Long> foundIds = managedRoles.stream().map(Role::getId).toList();
-                List<Long> missingIds = roleIds.stream()
-                        .filter(id -> !foundIds.contains(id))
-                        .toList();
-                throw new IllegalArgumentException(
-                        String.format("Roles with IDs %s not found", missingIds));
-            }
-            if (!existingUser.getRoles().equals(managedRoles)) {
-                existingUser.setRoles(managedRoles);
-            }
+            existing.setRoles(resolveRoles(roleIds));
         }
-        userRepository.save(existingUser);
+        userRepository.save(existing);
     }
 
     @Override
-    @Transactional
     public void deleteUser(Long id) {
         userRepository.deleteById(id);
     }
 
     @Override
-    @Transactional
     public void addRoleToUser(Long userId, Role role) {
-        if (userId == null) {
-            throw new IllegalArgumentException("User ID cannot be null");
-        }
-        if (role == null || role.getId() == null) {
-            throw new IllegalArgumentException("Role cannot be null and must have ID");
-        }
-        Role managedRole = roleRepository.findById(role.getId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        String.format("Role with id %d not found", role.getId())));
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        String.format("User with id %d not found", userId)));
+        User user = getUserById(userId);
 
-        if (user.getRoles().stream().anyMatch(r -> r.getId().equals(managedRole.getId()))) {
-            throw new IllegalArgumentException(
-                    String.format("User %s already has role %s",
-                            user.getUsername(), managedRole.getName()));
+        Role managed =
+                roleRepository.findById(role.getId())
+                        .orElseThrow(() -> new IllegalArgumentException("Role not found"));
+
+        if (user.getRoles().contains(managed)) {
+            throw new IllegalArgumentException("User already has this role");
         }
-        user.addRole(managedRole);
+        user.addRole(managed);
         userRepository.save(user);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public boolean existsByUsername(String username) {
-        return userRepository.findByUsername(username).isPresent();
     }
 
     @Override
@@ -165,6 +171,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     public UserDetails loadUserByUsername(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
@@ -173,93 +180,71 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     @Override
-    public String authUser(Authentication authentication) {
-        if (authentication != null && authentication.isAuthenticated()) {
-            if (authentication.getAuthorities().stream()
-                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
-                return "redirect:/admin";
-            }
-            return "redirect:/user";
+    public String authUser(Authentication auth) {
+        if (auth != null && auth.isAuthenticated()) {
+            boolean isAdmin = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+            return isAdmin ? "redirect:/admin" : "redirect:/user";
         }
         return "login";
     }
 
     @Override
     public String createUser(User user, Set<Long> roleIds) {
-        if (user.getPassword() == null || user.getPassword().length() < 4) {
+
+        if (user.getPassword().length() < 4) {
             throw new PasswordException("Пароль должен содержать минимум 4 символа");
         }
         if (existsByUsername(user.getUsername())) {
             throw new UserNameExistException("Этот логин уже занят");
         }
-        Set<Role> roles = new HashSet<>();
-        if (roleIds != null && !roleIds.isEmpty()) {
-            List<Role> foundRoles = roleRepository.findAllByIdIn(new ArrayList<>(roleIds));
-
-            if (foundRoles.size() != roleIds.size()) {
-                Set<Long> foundIds = foundRoles.stream()
-                        .map(Role::getId)
-                        .collect(Collectors.toSet());
-
-                List<Long> missingIds = roleIds.stream()
-                        .filter(id -> !foundIds.contains(id))
-                        .collect(Collectors.toList());
-                throw new IllegalArgumentException("Роли с ID " + missingIds + " не найдены");
-            }
-            roles.addAll(foundRoles);
+        Set<Role> roles;
+        if (roleIds == null || roleIds.isEmpty()) {
+            roles = Collections.singleton(getOrCreateRole("ROLE_USER"));
         } else {
-            Role defaultRole = roleRepository.findByName("ROLE_USER")
-                    .orElseGet(() -> {
-                        Role role = new Role();
-                        role.setName("ROLE_USER");
-                        return roleRepository.save(role);
-                    });
-            roles.add(defaultRole);
+            roles = resolveRoles(new ArrayList<>(roleIds));
         }
         user.setRoles(roles);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+
         userRepository.save(user);
         return "redirect:/admin";
     }
 
     @Override
     public String regUser(User user) {
-        if (user.getPassword() == null || user.getPassword().length() < 4) {
+
+        if (user.getPassword().length() < 4) {
             throw new PasswordException("Пароль должен содержать минимум 4 символа");
         }
         if (existsByUsername(user.getUsername())) {
             throw new UserNameException("Этот логин уже занят");
         }
-
-        String selectedRole = user.getSelectedRole();
-        if (selectedRole == null || (!selectedRole.equals("ADMIN") && !selectedRole.equals("USER"))) {
-            selectedRole = "USER";
+        String selected = user.getSelectedRole();
+        if (!"ADMIN".equals(selected) && !"USER".equals(selected)) {
+            selected = "USER";
         }
-        String roleName = "ROLE_" + selectedRole;
-        Role role = roleRepository.findByName(roleName)
-                .orElseGet(() -> {
-                    Role newRole = new Role();
-                    newRole.setName(roleName);
-                    return roleRepository.save(newRole);
-                });
+        Role role = getOrCreateRole("ROLE_" + selected);
+
         user.setRoles(Collections.singleton(role));
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+
         userRepository.save(user);
         return "redirect:/login?success";
     }
 
     @Override
     public void contUpdateUser(Long id, String username, String password, List<Long> roleIds) {
-        User user = getUserById(id);
-        user.setUsername(username);
 
+        User user = getUserById(id);
+
+        user.setUsername(username);
         if (password != null && !password.isEmpty()) {
             user.setPassword(passwordEncoder.encode(password));
         }
-
         if (roleIds != null && !roleIds.isEmpty()) {
-            Set<Role> roles = new HashSet<>(roleRepository.findAllByIdIn(roleIds));
-            user.setRoles(roles);
+            user.setRoles(resolveRoles(roleIds));
         }
         updateUser(user, roleIds);
     }
